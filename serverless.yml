@@ -1,0 +1,35 @@
+service: api-example
+
+useDotenv: true
+
+provider:
+  name: aws
+  runtime: nodejs14.x
+  region: us-west-2
+  timeout: 30
+  lambdaHashingVersion: 20200924
+
+plugins:
+  - serverless-plugin-typescript
+  - serverless-offline
+  - serverless-dotenv-plugin
+
+functions:
+  createTradesmanFunc:
+    handler: src/handler.HelloWorldHandler
+    events:
+      - http:
+          path: /hello-world
+          method: get
+          cors:
+            origins:
+              - ${env:ORIGIN, '*'}
+            headers:
+              - Content-Type
+              - Access-Control-Allow-Origin
+              - X-Amz-Date
+              - Authorization
+              - X-Api-Key
+              - X-Amz-Security-Token
+              - X-Amz-User-Agent
+            allowCredentials: false
