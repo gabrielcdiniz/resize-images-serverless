@@ -1,7 +1,7 @@
 import './config/module-alias';
 import { headers } from '@src/config/constants';
 
-export const HelloWorldHandler = async (_event: any, _context: any) => {
+export const handler = async (_event: any, _context: any) => {
   return {
     statusCode: 200,
     headers,
