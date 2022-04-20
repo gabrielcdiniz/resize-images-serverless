@@ -1,22 +1,53 @@
-service: api-example
+service: resize-images-otf
 
 useDotenv: true
-
-provider:
-  name: aws
-  runtime: nodejs14.x
-  region: us-west-2
-  timeout: 30
-  lambdaHashingVersion: 20200924
 
 plugins:
   - serverless-plugin-typescript
   - serverless-offline
   - serverless-dotenv-plugin
 
+custom:
+  stage: ${opt:stage, self:provider.stage}
+  settings:
+    dev:
+      S3_BUCKET: ace1-sneakers-images-test
+    prod:
+      S3_BUCKET: sneakers-cdn.ace1.com.br
+
+provider:
+  name: aws
+  runtime: nodejs14.x
+
+  # Default memory size for functions (default: 1024MB)
+  memorySize: 1024
+
+  # Default timeout for functions (default: 6 seconds)
+  # Note: API Gateway has a maximum timeout of 30 seconds
+  timeout: 10
+
+  # Function environment variables
+  environment:
+    S3_BUCKET: ${self:custom.settings.${self:custom.stage}.S3_BUCKET}
+
+  # Duration for CloudWatch log retention (default: forever)
+  logRetentionInDays: 30
+
+  # Version of hashing algorithm used by Serverless Framework for function packaging
+  lambdaHashingVersion: 20201221
+
+  # Processor architecture: 'x86_64' or 'arm64' via Graviton2 (default: x86_64)
+  # architecture: x86_64
+
+  # Default region (default: us-east-1)
+  region: us-west-2
+
+  # Default stage (default: dev)
+  stage: dev
+
 functions:
   createTradesmanFunc:
-    handler: src/handler.HelloWorldHandler
+    handler: src/handler.handler
     events:
       - http:
           path: /hello-world
@@ -33,3 +64,35 @@ functions:
               - X-Amz-Security-Token
               - X-Amz-User-Agent
             allowCredentials: false
+
+resources:
+  Resources:
+    S3Bucket:
+      Type: "AWS::S3::Bucket"
+      Properties:
+        AccessControl: public-read
+        BucketName: ${self:custom.settings.${self:custom.stage}.S3_BUCKET}
+        WebsiteConfiguration:
+          IndexDocument: index.html
+          # ErrorDocument: error.html # (Optional)
+          RoutingRules:
+            - RoutingRuleCondition:
+                HttpErrorCodeReturnedEquals: "404"
+              RedirectRule:
+                HttpRedirectCode: "307"
+                Protocol: https
+                # TODO: pegar a url de API Gateway quando for gerada
+                HostName: jhrjy88z83.execute-api.us-east-1.amazonaws.com
+                # TODO: pegar modo PROD e DEV
+                ReplaceKeyPrefixWith: default/${self:service}?path=
+        CorsConfiguration:
+          CorsRules:
+            - AllowedOrigins:
+                - "*"
+              AllowedHeaders:
+                - "*"
+              AllowedMethods:
+                - GET
+                - PUT
+                - HEAD
+              MaxAge: 84600
