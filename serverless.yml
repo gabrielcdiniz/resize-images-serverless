@@ -8,6 +8,7 @@ plugins:
   - serverless-dotenv-plugin
 
 custom:
+  policy_version: "2012-10-17"
   stage: ${opt:stage, self:provider.stage}
   settings:
     dev:
@@ -52,18 +53,6 @@ functions:
       - http:
           path: /hello-world
           method: get
-          cors:
-            origins:
-              - ${env:ORIGIN, '*'}
-            headers:
-              - Content-Type
-              - Access-Control-Allow-Origin
-              - X-Amz-Date
-              - Authorization
-              - X-Api-Key
-              - X-Amz-Security-Token
-              - X-Amz-User-Agent
-            allowCredentials: false
 
 resources:
   Resources:
@@ -88,7 +77,7 @@ resources:
         CorsConfiguration:
           CorsRules:
             - AllowedOrigins:
-                - "*"
+                - "*" # TODO: definir quais endpoints
               AllowedHeaders:
                 - "*"
               AllowedMethods:
@@ -96,3 +85,62 @@ resources:
                 - PUT
                 - HEAD
               MaxAge: 84600
+
+    ApplicationRole:
+      Type: AWS::IAM::Role
+      Properties:
+        RoleName: ApplicationRole # required if you want to use 'serverless deploy --function' later on
+        AssumeRolePolicyDocument:
+          Version: ${self:custom.policy_version}
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                  - lambda.amazonaws.com
+              Action: sts:AssumeRole
+
+        # Pattern: Service-Name:(Allow|Deny):Action-Type
+        Policies:
+          - PolicyName: "S3:Allow:PutObject"
+            PolicyDocument:
+              Version: ${self:custom.policy_version}
+              Statement:
+                - Effect: "Allow"
+                  Action:
+                    - "s3:PutObject"
+                  Resource: !Join
+                      - ""
+                      - - "arn:aws:s3:::"
+                        - !Ref "ServerlessDeploymentBucket"
+
+          - PolicyName: "CloudWatch:Allow:CreateLogs"
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                - Effect: Allow # note that these rights are given in the default policy and are required if you want logs out of your lambda(s)
+                  Action:
+                    - logs:CreateLogGroup
+                    - logs:CreateLogStream
+                    - logs:PutLogEvents
+                  Resource:
+                    - !Join
+                      - ":"
+                      - - "arn:aws:logs"
+                        - !Ref "AWS::Region"
+                        - !Ref "AWS::AccountId"
+                        - "log-group:/aws/lambda/*:*:*"
+
+  Outputs:
+    WebsiteURL:
+      Value: !GetAtt
+        - S3Bucket
+        - WebsiteURL
+      Description: URL for website hosted on S3
+    S3BucketSecureURL:
+      Value: !Join
+        - ""
+        - - "https://"
+          - !GetAtt
+            - S3Bucket
+            - DomainName
+      Description: Name of S3 bucket to hold website content
