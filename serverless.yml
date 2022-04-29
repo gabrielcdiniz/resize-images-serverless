@@ -1,57 +1,38 @@
-service: resize-images-otf
-
-useDotenv: true
+service: resize-images-otf-TESTING-2
 
 plugins:
   - serverless-plugin-typescript
   - serverless-offline
-  - serverless-dotenv-plugin
 
 custom:
   policy_version: "2012-10-17"
-  stage: ${opt:stage, self:provider.stage}
-  settings:
-    dev:
-      S3_BUCKET: ace1-sneakers-images-test
-    prod:
-      S3_BUCKET: sneakers-cdn.ace1.com.br
+  settings: ${file(./resources/config/${opt:stage, 'dev'}.yml)}
 
 provider:
   name: aws
   runtime: nodejs14.x
-
-  # Default memory size for functions (default: 1024MB)
   memorySize: 1024
-
-  # Default timeout for functions (default: 6 seconds)
-  # Note: API Gateway has a maximum timeout of 30 seconds
   timeout: 10
+  logRetentionInDays: 7
+  region: ${opt:region, 'us-west-2'}
+  stage: ${opt:stage, 'dev'}
 
-  # Function environment variables
+  # apiGateway:
+  #   restApiId:
+  #     Fn::ImportValue: postsapi-${opt:stage}-RestApiId
+  #   restApiRootResourceId:
+  #     Fn::ImportValue: postsapi-${opt:stage}-RootResourceId
+
   environment:
-    S3_BUCKET: ${self:custom.settings.${self:custom.stage}.S3_BUCKET}
-
-  # Duration for CloudWatch log retention (default: forever)
-  logRetentionInDays: 30
-
-  # Version of hashing algorithm used by Serverless Framework for function packaging
-  lambdaHashingVersion: 20201221
-
-  # Processor architecture: 'x86_64' or 'arm64' via Graviton2 (default: x86_64)
-  # architecture: x86_64
-
-  # Default region (default: us-east-1)
-  region: us-west-2
-
-  # Default stage (default: dev)
-  stage: dev
+    S3_BUCKET: ${self:custom.settings.S3_BUCKET}
 
 functions:
-  createTradesmanFunc:
+  resizeImageOTF:
     handler: src/handler.handler
+    name: ${self:service}-${opt:stage, self:provider.stage}
     events:
       - http:
-          path: /hello-world
+          path: /{proxy+}
           method: get
 
 resources:
@@ -59,21 +40,8 @@ resources:
     S3Bucket:
       Type: "AWS::S3::Bucket"
       Properties:
-        AccessControl: public-read
-        BucketName: ${self:custom.settings.${self:custom.stage}.S3_BUCKET}
-        WebsiteConfiguration:
-          IndexDocument: index.html
-          # ErrorDocument: error.html # (Optional)
-          RoutingRules:
-            - RoutingRuleCondition:
-                HttpErrorCodeReturnedEquals: "404"
-              RedirectRule:
-                HttpRedirectCode: "307"
-                Protocol: https
-                # TODO: pegar a url de API Gateway quando for gerada
-                HostName: jhrjy88z83.execute-api.us-east-1.amazonaws.com
-                # TODO: pegar modo PROD e DEV
-                ReplaceKeyPrefixWith: default/${self:service}?path=
+        AccessControl: PublicRead
+        BucketName: ${self:custom.settings.S3_BUCKET}
         CorsConfiguration:
           CorsRules:
             - AllowedOrigins:
@@ -85,62 +53,93 @@ resources:
                 - PUT
                 - HEAD
               MaxAge: 84600
+        WebsiteConfiguration:
+          IndexDocument: index.html
+          # ErrorDocument: error.html # (Optional)
+          RoutingRules:
+            - RoutingRuleCondition:
+                HttpErrorCodeReturnedEquals: "404"
+              RedirectRule:
+                HttpRedirectCode: "307"
+                Protocol: https
+                ReplaceKeyPrefixWith: ${self:provider.stage}/${self:service}?path=
+                HostName:
+                  Fn::Join:
+                    - "."
+                    - - !Ref ApiGatewayRestApi
+                      - "execute-api"
+                      - !Ref "AWS::Region"
+                      - "amazonaws.com"
 
-    ApplicationRole:
-      Type: AWS::IAM::Role
+    S3BucketPolicy: 
+      Type: AWS::S3::BucketPolicy
       Properties:
-        RoleName: ApplicationRole # required if you want to use 'serverless deploy --function' later on
-        AssumeRolePolicyDocument:
+        Bucket: !Ref S3Bucket
+        PolicyDocument:
           Version: ${self:custom.policy_version}
           Statement:
-            - Effect: Allow
-              Principal:
-                Service:
-                  - lambda.amazonaws.com
-              Action: sts:AssumeRole
+            - Action:
+                - "s3:GetObject"
+              Effect: Allow
+              Resource: !Join
+                - ""
+                - - "arn:aws:s3:::"
+                  - !Ref S3Bucket
+                  - /*
+              Principal: "*"
 
-        # Pattern: Service-Name:(Allow|Deny):Action-Type
-        Policies:
-          - PolicyName: "S3:Allow:PutObject"
-            PolicyDocument:
-              Version: ${self:custom.policy_version}
-              Statement:
-                - Effect: "Allow"
-                  Action:
-                    - "s3:PutObject"
-                  Resource: !Join
-                      - ""
-                      - - "arn:aws:s3:::"
-                        - !Ref "ServerlessDeploymentBucket"
+    # ApplicationRole:
+    #   Type: AWS::IAM::Role
+    #   Properties:
+    #     RoleName: ApplicationRole # required if you want to use 'serverless deploy --function' later on
+    #     AssumeRolePolicyDocument:
+    #       Version: ${self:custom.policy_version}
+    #       Statement:
+    #         - Effect: Allow
+    #           Principal:
+    #             Service:
+    #               - lambda.amazonaws.com
+    #           Action: sts:AssumeRole
 
-          - PolicyName: "CloudWatch:Allow:CreateLogs"
-            PolicyDocument:
-              Version: "2012-10-17"
-              Statement:
-                - Effect: Allow # note that these rights are given in the default policy and are required if you want logs out of your lambda(s)
-                  Action:
-                    - logs:CreateLogGroup
-                    - logs:CreateLogStream
-                    - logs:PutLogEvents
-                  Resource:
-                    - !Join
-                      - ":"
-                      - - "arn:aws:logs"
-                        - !Ref "AWS::Region"
-                        - !Ref "AWS::AccountId"
-                        - "log-group:/aws/lambda/*:*:*"
+    #     # Pattern: Service-Name:(Allow|Deny):Action-Type
+    #     Policies:
+    #       - PolicyName: "S3:Allow:PutObject"
+    #         PolicyDocument:
+    #           Version: ${self:custom.policy_version}
+    #           Statement:
+    #             - Effect: "Allow"
+    #               Action:
+    #                 - "s3:PutObject"
+    #               Resource: !Join
+    #                 - ""
+    #                 - - "arn:aws:s3:::"
+    #                   - !Ref "ServerlessDeploymentBucket"
+
+    #       - PolicyName: "CloudWatch:Allow:CreateLogs"
+    #         PolicyDocument:
+    #           Version: "2012-10-17"
+    #           Statement:
+    #             - Effect: Allow # note that these rights are given in the default policy and are required if you want logs out of your lambda(s)
+    #               Action:
+    #                 - logs:CreateLogGroup
+    #                 - logs:CreateLogStream
+    #                 - logs:PutLogEvents
+    #               Resource:
+    #                 - !Join
+    #                   - ":"
+    #                   - - "arn:aws:logs"
+    #                     - !Ref "AWS::Region"
+    #                     - !Ref "AWS::AccountId"
+    #                     - "log-group:/aws/lambda/*:*:*"
 
   Outputs:
     WebsiteURL:
-      Value: !GetAtt
-        - S3Bucket
-        - WebsiteURL
+      Value: !GetAtt S3Bucket.WebsiteURL
       Description: URL for website hosted on S3
+
     S3BucketSecureURL:
       Value: !Join
         - ""
         - - "https://"
-          - !GetAtt
-            - S3Bucket
-            - DomainName
+          - !GetAtt S3Bucket.DomainName
       Description: Name of S3 bucket to hold website content
