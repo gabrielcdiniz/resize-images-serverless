@@ -27,16 +27,21 @@
     ]
   },
   "dependencies": {
-    "module-alias": "^2.2.2"
+    "module-alias": "^2.2.2",
+    "sharp": "^0.30.4"
   },
   "devDependencies": {
+    "@types/aws-lambda": "^8.10.95",
+    "@types/aws-sdk": "^2.7.0",
     "@types/dotenv": "^8.2.0",
     "@types/jest": "^27.4.1",
     "@types/lambda-tester": "^3.6.1",
     "@types/module-alias": "^2.0.1",
     "@types/node": "^16.11.26",
+    "@types/sharp": "^0.30.2",
     "@typescript-eslint/eslint-plugin": "^5.7.0",
     "@typescript-eslint/parser": "^5.7.0",
+    "aws-sdk": "^2.1126.0",
     "eslint": "^8.4.1",
     "eslint-config-airbnb": "^19.0.2",
     "eslint-config-prettier": "^8.3.0",
